@@ -131,7 +131,7 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
     Xte, yte = select_xy(te, cfg["task"])
 
     # ---- prepare run directory ---------------------------------------------
-    run_dir = new_run_dir()
+    run_dir = None
     # ---- prepare / resume run directory ------------------------------------
     if resume_from:
         run_dir = Path(resume_from)
