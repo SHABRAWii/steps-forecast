@@ -1,0 +1,73 @@
+# configs/base.yaml
+
+# ===== Experiment task =====
+# "interval"  -> predict the next time slot(s) steps (uses horizon)
+# "daily_total" -> predict tomorrow's total steps (horizon ignored)
+task: "interval"
+horizon: 1               # slots ahead (1=next 15-min if you have 64 slots/day)
+agg_slot_minutes: 15
+
+# ===== Data locations =====
+data:
+  raw_mat_path: "data/interim/DataStepsOmar_complete_compat.mat"
+  varname: "DataComplete"
+  processed_path: "data/processed/steps_interval.parquet"
+
+# ===== Split settings =====
+split:
+  mode: "per_user_pct"     # options: "global_time", "per_user", "per_user_pct"
+
+  # used only if mode == "global_time"
+  train_until: "2024-06-30T23:59:59"
+  valid_until: "2024-08-31T23:59:59"
+
+  # used only if mode == "per_user"
+  per_user:
+    val_days: 14
+    test_days: 14
+
+  # used only if mode == "per_user_pct"
+  per_user_pct:
+    val_pct: 0.15                 # last 15% of each user's DISTINCT days -> validation
+    test_pct: 0.15                # last 15% of each user's DISTINCT days -> test
+    min_days_for_any_split: 10    # if a user has < 10 days, keep all in train
+    min_val_days: 1               # ensure at least 1 day if splitting
+    min_test_days: 1
+
+  # filter users who have too few total rows (before splitting)
+  min_samples_per_user: 2
+
+# ===== Feature engineering =====
+features:
+  use_hr: true                    # include HR in rolling features
+  lags: [1,2,3,4,8,16,32,64]      # past steps lags (per user)
+  roll_windows: [4,16,64]         # rolling windows (in observed slots)
+  calendar: ["dow","hour","month"]# (currently acts as on/off; all three added)
+  user_id_encoding: "onehot"      # "onehot" (global model) or "drop" (per-user runs)
+  target_col: "steps_t"
+
+# ===== Models to train =====
+models:
+  - name: "naive_last"            # baseline: ŷ = steps_lag1
+  - name: "linreg"
+  - name: "ridge"
+  - name: "ridge_sgd"
+  - name: "rf200"
+  - name: "et200"
+  - name: "hgb_l2"
+  - name: "hgb_mae"
+  # - name: "hgb_poisson_log1p"
+  # - name: "huber"
+  # - name: "rf100"
+
+# ===== Evaluation / runtime =====
+eval:
+  metrics: ["MAE","RMSE","MAPE","R2"]
+  top_k_plots: 3
+  save_preds: true
+  tolerance_steps: 50   # used for ToleranceAcc
+
+runtime:
+  random_state: 42
+  n_jobs: -1
+  run_note: "per_user_pct split, interval t+1"
