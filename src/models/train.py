@@ -38,7 +38,7 @@ from src.models.metrics import mae, rmse, mape, r2, perc_abs_error, tol_accuracy
 from src.models.registry import make_model
 
 
-def select_xy(df: pd.DataFrame, task: str):
+def select_xy(df: pd.DataFrame, task: str, drop_current_steps: bool = True):
     """
     Select features (X) and target (y) for training.
     - Drops the target column from features.
@@ -51,6 +51,8 @@ def select_xy(df: pd.DataFrame, task: str):
     # Avoid leakage: only keep numeric features and drop the target itself
     y = df[target].values
     X = df.drop(columns=[target]).select_dtypes(include=[np.number])
+    if drop_current_steps and "steps" in X.columns:
+        X = X.drop(columns=["steps"])
     return X, y
 
 

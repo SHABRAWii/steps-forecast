@@ -4,7 +4,7 @@
 # "interval"  -> predict the next time slot(s) steps (uses horizon)
 # "daily_total" -> predict tomorrow's total steps (horizon ignored)
 task: "interval"
-horizon: 1               # slots ahead (1=next 15-min if you have 64 slots/day)
+horizon: 0               # slots ahead (1=next 15-min if you have 64 slots/day)
 agg_slot_minutes: 15
 
 # ===== Data locations =====
@@ -40,6 +40,7 @@ split:
 # ===== Feature engineering =====
 features:
   use_hr: true                    # include HR in rolling features
+  allow_step_inputs: false
   lags: [1,2,3,4,8,16,32,64]      # past steps lags (per user)
   roll_windows: [4,16,64]         # rolling windows (in observed slots)
   calendar: ["dow","hour","month"]# (currently acts as on/off; all three added)
@@ -48,14 +49,15 @@ features:
 
 # ===== Models to train =====
 models:
-  - name: "naive_last"            # baseline: ŷ = steps_lag1
+  # - name: "naive_last"            # baseline: ŷ = steps_lag1
   - name: "linreg"
-  - name: "ridge"
-  - name: "ridge_sgd"
-  - name: "rf200"
-  - name: "et200"
-  - name: "hgb_l2"
-  - name: "hgb_mae"
+  # - name: "ridge"
+  # - name: "ridge_sgd"
+  # - name: "rf200"
+  # - name: "et200"
+  # - name: "hgb_l2"
+  # - name: "hgb_mae"
+  
   # - name: "hgb_poisson_log1p"
   # - name: "huber"
   # - name: "rf100"

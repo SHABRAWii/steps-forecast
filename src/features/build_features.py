@@ -51,6 +51,19 @@ def make_rolls(df: pd.DataFrame, cols=("steps","hr"), windows=(4,16,64)) -> pd.D
             df[f"{c}_mean_{w}"] = df.groupby("user_id")[c].transform(lambda s: s.rolling(w, min_periods=1).mean())
             df[f"{c}_std_{w}"]  = df.groupby("user_id")[c].transform(lambda s: s.rolling(w, min_periods=1).std())
     return df
+def make_rolls_past_only(df, cols=("hr",), windows=(4,16,64)):
+    # windows computed on series shifted by 1 → only <= t-1 contributes
+    for c in cols:
+        s = df.groupby("user_id", sort=False)[c].shift(1)  # exclude current slot
+        for w in windows:
+            df[f"{c}_mean_{w}"] = (
+                s.groupby(df["user_id"]).transform(lambda x: x.rolling(w, min_periods=1).mean())
+            )
+            df[f"{c}_std_{w}"] = (
+                s.groupby(df["user_id"]).transform(lambda x: x.rolling(w, min_periods=2).std())
+            )
+    return df
+
 
 def add_targets_interval(df: pd.DataFrame, horizon=1) -> pd.DataFrame:
     df["steps_t"] = df.groupby("user_id")["steps"].shift(-horizon)
@@ -66,9 +79,10 @@ def add_targets_daily_total(df: pd.DataFrame) -> pd.DataFrame:
     return daily
 
 # ---------- main pipeline ----------
+def main(in_path, out_path, task, horizon, use_hr, lags, rolls, calendar, user_id_encoding, 
+         allow_step_inputs, add_slot_day=True, add_gap=True, strict_15min=False):
+    
 
-def main(in_path, out_path, task, horizon, use_hr, lags, rolls, calendar, user_id_encoding,
-         add_slot_day=True, add_gap=True, strict_15min=False):
     """
     - add_slot_day:   adds slot_in_day (0..63) and 'day' columns
     - add_gap:        adds delta_minutes_from_prev
@@ -85,17 +99,29 @@ def main(in_path, out_path, task, horizon, use_hr, lags, rolls, calendar, user_i
         df = df[(df["delta_minutes_from_prev"].isna()) | (df["delta_minutes_from_prev"] == 15)]
 
     # selective calendar
-    df = add_calendar(df, which=calendar)
+    if calendar: df = add_calendar(df)
 
     if task == "interval":
-        if lags:
-            df = make_lags(df, "steps", tuple(lags))
-        if use_hr and rolls:
-            df = make_rolls(df, ("steps","hr"), tuple(rolls))
-        elif rolls:
-            df = make_rolls(df, ("steps",), tuple(rolls))
+        # TARGET: current or future depending on horizon
         df = add_targets_interval(df, horizon=horizon)
-        df = df.dropna(subset=["steps_t"])
+        df = df.dropna(subset=["steps_t"])  # for horizon=0, this keeps all rows
+
+        if allow_step_inputs:
+            # (not your case) original behavior that can include step features
+            if lags:   df = make_lags(df, "steps", tuple(lags))
+            if use_hr and lags: df = make_lags(df, "hr", tuple(lags))
+            if rolls:
+                cols = ("steps","hr") if use_hr else ("steps",)
+                df = make_rolls(df, cols, tuple(rolls))
+        else:
+            # STRICT: no step-derived inputs; HR-only and past-only rolls
+            if use_hr and lags:
+                df = make_lags(df, "hr", tuple(lags))             # hr_lag1, hr_lag2, ...
+            if use_hr and rolls:
+                df = make_rolls_past_only(df, ("hr",), tuple(rolls))  # hr_mean_*, hr_std_*
+
+            # ensure raw 'steps' is not used as a feature later
+            # (we keep it in the frame because steps_t equals steps, but we'll drop it from X)
     else:
         df = add_targets_daily_total(df)
 
@@ -124,6 +150,7 @@ if __name__ == "__main__":
     ap.add_argument("--rolls", nargs="*", type=int, default=[4,16,64])
     ap.add_argument("--calendar", nargs="*", default=["dow","hour","month"])  # selective now
     ap.add_argument("--uid_enc", choices=["onehot","drop"], default="onehot")
+    ap.add_argument("--allow_step_inputs", action="store_true")
 
     # NEW toggles for irregular data handling
     ap.add_argument("--add_slot_day", action="store_true")
@@ -133,5 +160,5 @@ if __name__ == "__main__":
     a = ap.parse_args()
     main(
         a.inp, a.out, a.task, a.horizon, a.use_hr, a.lags, a.rolls, a.calendar, a.uid_enc,
-        add_slot_day=a.add_slot_day, add_gap=a.add_gap, strict_15min=a.strict_15min
+        add_slot_day=a.add_slot_day, add_gap=a.add_gap, strict_15min=a.strict_15min, allow_step_inputs=a.allow_step_inputs
     )

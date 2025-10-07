@@ -25,6 +25,8 @@ def main():
         ]
         if cfg["features"]["use_hr"]:
             args.append("--use_hr")
+        if cfg["features"].get("allow_step_inputs", True):
+            args.append("--allow_step_inputs")
         args += ["--lags", *map(str, cfg["features"]["lags"])]
         args += ["--rolls", *map(str, cfg["features"]["roll_windows"])]
         args += ["--calendar", *cfg["features"]["calendar"]]
