@@ -84,12 +84,12 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
     if not resume_from:
         resume_from = cfg.get("runtime", {}).get("resume_from", "") or ""
 
-    if resume_from:
-        run_dir = Path(resume_from)
-        print(f"[Resume] Resuming run: {run_dir}")
-    else:
-        run_dir = Path(new_run_dir())
-        print(f"[Run] New run dir: {run_dir}")
+    # if resume_from:
+    #     run_dir = Path(resume_from)
+    #     print(f"[Resume] Resuming run: {run_dir}")
+    # else:
+    #     run_dir = Path(new_run_dir())
+    #     print(f"[Run] New run dir: {run_dir}")
         
     # Optional: filter users with enough samples BEFORE splitting
     split_cfg = cfg.get("split", {})
