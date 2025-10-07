@@ -283,6 +283,9 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
             naive_mae_val = mae_va
             naive_mae_test = mae_te
 
+        # print tolerance accuracy for val/test
+        print(f"  Val   - MAE: {mae_va:.1f} | RMSE: {rmse_va:.1f} | MAPE: {mape_va:.1f}% | R2: {r2_va:.3f} | Tol@{tol_k}: {tolacc_va:.3f} | DirAcc: {diracc_va:.3f}")
+        print(f"  Test  - MAE: {mae_te:.1f} | RMSE: {rmse_te:.1f} | MAPE: {mape_te:.1f}% | R2: {r2_te:.3f} | Tol@{tol_k}: {tolacc_te:.3f} | DirAcc: {diracc_te:.3f}")
         # We’ll compute lift after loop when we know naive
         record = {
             "model": name,
