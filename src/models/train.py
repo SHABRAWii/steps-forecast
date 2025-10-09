@@ -71,7 +71,10 @@ def plot_preds(y: np.ndarray, yhat: np.ndarray, path: Path, n: int = 500):
     path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(path, bbox_inches="tight")
     plt.close()
-
+# in train.py before fit()
+def make_sample_weight(y, k=200, power=1.0, cap=5.0):
+    w = 1.0 + np.minimum((np.abs(y) / k)**power, cap)  # >1 for big steps
+    return w.astype("float32")
 
 def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
     # ---- read config & data -------------------------------------------------
@@ -239,8 +242,12 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
                 # Xtr_f = Xtr.astype("float32")
                 # Xva_f = Xva.astype("float32")
                 # Xte_f = Xte.astype("float32")
-
-                pipe.fit(Xtr_f, ytr)
+                if name == "hgb_mae":
+                    w_tr = make_sample_weight(ytr, k=200, power=1.0, cap=5.0)
+                    pipe.fit(Xtr_f, ytr, model__sample_weight=w_tr)
+                    del w_tr
+                else:
+                    pipe.fit(Xtr_f, ytr)
                 yhat_tr = pipe.predict(Xtr_f)
 
                 # Save model
