@@ -9,6 +9,7 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import HuberRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 import numpy as np
 
 
@@ -92,6 +93,14 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             max_bins=255,
             random_state=random_state,
         )
+    if name == "two_stage_hgb":
+        return TwoStageHGB(
+            thr=50,
+            pos_class_weight=3.0,
+            reg_lr=0.06, reg_max_iter=400,
+            reg_min_samples_leaf=100,
+            random_state=random_state,
+        )
 
     raise ValueError(f"Unknown model: {name}")
 
@@ -169,3 +178,74 @@ class HGBMAEBlendPeak(BaseEstimator, RegressorMixin):
         yb = self.base_.predict(X)
         yp = self.peak_.predict(X)
         return self.alpha * yb + (1.0 - self.alpha) * yp
+class TwoStageHGB(BaseEstimator, RegressorMixin):
+    """
+    Stage A: classify active (steps >= thr) with HGB-Classifier
+    Stage B: regress steps on active rows with HGB-Regressor (MAE)
+    Prediction: y_hat = P(active) * y_hat_reg
+    """
+    def __init__(
+        self,
+        thr=50,                    # activity threshold in steps for current slot
+        clf_lr=0.1, clf_max_depth=6, clf_min_samples_leaf=200, clf_max_bins=255,
+        reg_lr=0.06, reg_max_depth=None, reg_min_samples_leaf=100, reg_max_bins=255, reg_max_iter=400,
+        pos_class_weight=3.0,      # upweight active class (usually rare)
+        random_state=42,
+    ):
+        self.thr = thr
+        self.clf_lr = clf_lr
+        self.clf_max_depth = clf_max_depth
+        self.clf_min_samples_leaf = clf_min_samples_leaf
+        self.clf_max_bins = clf_max_bins
+        self.reg_lr = reg_lr
+        self.reg_max_depth = reg_max_depth
+        self.reg_min_samples_leaf = reg_min_samples_leaf
+        self.reg_max_bins = reg_max_bins
+        self.reg_max_iter = reg_max_iter
+        self.pos_class_weight = pos_class_weight
+        self.random_state = random_state
+        self.clf_ = None
+        self.reg_ = None
+
+    def fit(self, X, y):
+        y = np.asarray(y)
+        active = (y >= self.thr).astype(np.int32)
+
+        # ---- Classifier (active vs inactive) ----
+        # class_weight via sample weights
+        w = np.ones_like(y, dtype="float32")
+        w[active == 1] = self.pos_class_weight
+
+        self.clf_ = HistGradientBoostingClassifier(
+            learning_rate=self.clf_lr,
+            max_depth=self.clf_max_depth,
+            min_samples_leaf=self.clf_min_samples_leaf,
+            max_bins=self.clf_max_bins,
+            random_state=self.random_state,
+        )
+        self.clf_.fit(X, active, sample_weight=w)
+
+        # ---- Regressor (only on active rows) ----
+        self.reg_ = HistGradientBoostingRegressor(
+            loss="absolute_error",
+            learning_rate=self.reg_lr,
+            max_depth=self.reg_max_depth,
+            min_samples_leaf=self.reg_min_samples_leaf,
+            max_bins=self.reg_max_bins,
+            max_iter=self.reg_max_iter,
+            random_state=self.random_state,
+        )
+        m = active.astype(bool)
+        if m.sum() == 0:
+            # fallback: train on all rows to avoid crash
+            self.reg_.fit(X, y)
+        else:
+            self.reg_.fit(X[m], y[m])
+        return self
+
+    def predict(self, X):
+        p_active = self.clf_.predict_proba(X)[:, 1]    # [0,1]
+        y_reg = self.reg_.predict(X)                   # ≥0 but model may output small negatives
+        y_pred = p_active * y_reg
+        # clamp tiny negatives (rare numerical artifact)
+        return np.maximum(y_pred, 0.0)
