@@ -11,6 +11,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 import numpy as np
+from src.models.instances.autoQ80 import AutoQ80
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -106,6 +107,8 @@ def make_model(name: str, random_state=42, n_jobs=-1):
 
     if name == "hgb_mae_qblend":
         return HGBMaePlusQBlend(alpha=0.75, q=0.8, random_state=random_state)
+    if name == "hgb_q80_auto":
+        return AutoQ80(cv_splits=5, random_state=random_state, grid=None, verbose=0)
 
     raise ValueError(f"Unknown model: {name}")
 
