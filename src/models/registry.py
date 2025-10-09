@@ -108,7 +108,7 @@ def make_model(name: str, random_state=42, n_jobs=-1):
     if name == "hgb_mae_qblend":
         return HGBMaePlusQBlend(alpha=0.75, q=0.8, random_state=random_state)
     if name == "hgb_q80_auto":
-        return AutoQ80(cv_splits=5, random_state=random_state, grid=None, verbose=0)
+        return AutoQ80(cv_splits=5, random_state=random_state, grid=None, verbose=1)
 
     raise ValueError(f"Unknown model: {name}")
 

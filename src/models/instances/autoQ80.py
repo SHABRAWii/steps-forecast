@@ -106,12 +106,17 @@ class AutoQ80(BaseEstimator, RegressorMixin):
 
             cv_mae = float(np.mean(fold_mae))
             if self.verbose:
+                #print how many models have been tried so far and how many in total
+                print(f"[AutoQ80] Tried {len(fold_mae)} of {self.cv_splits} folds. ", end="")
                 print(f"[AutoQ80] params={params}  CV-MAE={cv_mae:.3f}")
+                
 
             if cv_mae < best_mae:
                 best_mae = cv_mae
                 best_params = params
                 best_model = clone(model)
+                if self.verbose:
+                    print(f"  New best! params={best_params}  CV-MAE={best_mae:.3f}")
 
         if best_model is None:
             # Fallback: use defaults
