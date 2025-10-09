@@ -81,9 +81,9 @@ def make_model(name: str, random_state=42, n_jobs=-1):
     # ---- Blended HGB-MAE (base + peak-weighted) -----------------------------
     if name == "hgb_mae_blend":
         return HGBMAEBlendPeak(
-            alpha=0.7,      # try 0.7–0.9
+            alpha=0.5,      # try 0.7–0.9
             k=200.0,        # try 150–300
-            power=1.1,      # try 0.7–1.3
+            power=1.0,      # try 0.7–1.3
             cap=3.0,        # start gentler than 5.0 if tol-acc drops
             learning_rate=0.06,
             max_iter=400,
