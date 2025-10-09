@@ -77,6 +77,16 @@ def add_targets_daily_total(df: pd.DataFrame) -> pd.DataFrame:
     daily = daily.sort_values(["user_id","day"])
     daily["steps_t"] = daily.groupby("user_id")["steps"].shift(-1)
     return daily
+def add_hr_dynamics(df):
+    # needs hr_lag1 at least
+    if "hr_lag1" in df.columns:
+        df["hr_delta1"] = (df["hr"] - df["hr_lag1"]).astype("float32")
+    # rolling max & std on past-only HR
+    g = df.groupby("user_id", sort=False)["hr"].shift(1)  # <= t-1
+    for w in (4, 16, 64):
+        df[f"hr_max_{w}"] = g.groupby(df["user_id"]).transform(lambda x: x.rolling(w, min_periods=1).max()).astype("float32")
+        df[f"hr_std_{w}"] = g.groupby(df["user_id"]).transform(lambda x: x.rolling(w, min_periods=2).std()).astype("float32")
+    return df
 
 # ---------- main pipeline ----------
 def main(in_path, out_path, task, horizon, use_hr, lags, rolls, calendar, user_id_encoding, 
@@ -117,6 +127,8 @@ def main(in_path, out_path, task, horizon, use_hr, lags, rolls, calendar, user_i
             # STRICT: no step-derived inputs; HR-only and past-only rolls
             if use_hr and lags:
                 df = make_lags(df, "hr", tuple(lags))             # hr_lag1, hr_lag2, ...
+            if use_hr:
+                df = add_hr_dynamics(df)
             if use_hr and rolls:
                 df = make_rolls_past_only(df, ("hr",), tuple(rolls))  # hr_mean_*, hr_std_*
 

@@ -3,13 +3,13 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
-from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import SGDRegressor
 from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import HuberRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.base import BaseEstimator, RegressorMixin
 import numpy as np
 
 
@@ -101,6 +101,11 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             reg_min_samples_leaf=100,
             random_state=random_state,
         )
+    if name == "hgb_q80":
+        return HGBQuantile(quantile=0.8, random_state=random_state)
+
+    if name == "hgb_mae_qblend":
+        return HGBMaePlusQBlend(alpha=0.75, q=0.8, random_state=random_state)
 
     raise ValueError(f"Unknown model: {name}")
 
@@ -249,3 +254,43 @@ class TwoStageHGB(BaseEstimator, RegressorMixin):
         y_pred = p_active * y_reg
         # clamp tiny negatives (rare numerical artifact)
         return np.maximum(y_pred, 0.0)
+class HGBQuantile(BaseEstimator, RegressorMixin):
+    def __init__(self, quantile=0.8, learning_rate=0.06, max_iter=600,
+                 max_depth=None, min_samples_leaf=100, max_bins=255, random_state=42):
+        self.quantile = quantile
+        self.params = dict(loss="quantile", quantile=quantile,
+                           learning_rate=learning_rate, max_iter=max_iter,
+                           max_depth=max_depth, min_samples_leaf=min_samples_leaf,
+                           max_bins=max_bins, random_state=random_state)
+        self.model_ = None
+
+    def fit(self, X, y):
+        self.model_ = HistGradientBoostingRegressor(**self.params)
+        self.model_.fit(X, y)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+class HGBMaePlusQBlend(BaseEstimator, RegressorMixin):
+    """ŷ = a*ŷ_MAE + (1-a)*ŷ_Q, with a chosen later (config)"""
+    def __init__(self, alpha=0.75, q=0.8, random_state=42):
+        self.alpha = alpha
+        self.q = q
+        self.random_state = random_state
+        self.base_ = HistGradientBoostingRegressor(loss="absolute_error",
+                                                   learning_rate=0.06, max_iter=400,
+                                                   max_depth=None, min_samples_leaf=100,
+                                                   max_bins=255, random_state=random_state)
+        self.qr_   = HistGradientBoostingRegressor(loss="quantile", quantile=q,
+                                                   learning_rate=0.06, max_iter=600,
+                                                   max_depth=None, min_samples_leaf=100,
+                                                   max_bins=255, random_state=random_state)
+    def fit(self, X, y):
+        self.base_.fit(X, y)
+        self.qr_.fit(X, y)
+        return self
+    def predict(self, X):
+        yb = self.base_.predict(X)
+        yq = self.qr_.predict(X)
+        return self.alpha*yb + (1.0-self.alpha)*yq

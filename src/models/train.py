@@ -85,7 +85,26 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
     # ---- read config & data -------------------------------------------------
     cfg = yaml.safe_load(open(cfg_path, "r", encoding="utf-8"))
     df = read_parquet(cfg["data"]["processed_path"])
+    df = df.sort_values(["user_id","ts"])
 
+    # build priors from train portion ONLY
+    from src.utils.time import time_split_per_user_pct
+    tr_df, va_df, te_df = time_split_per_user_pct(
+        df, "ts", val_pct=0.15, test_pct=0.15, min_days_for_any_split=10
+    )
+
+    priors = (tr_df
+        .groupby(["user_id", tr_df["ts"].dt.dayofweek, tr_df["ts"].dt.hour], as_index=False)
+        .agg(prior_usr_dow_hour=("steps_t","mean"))    # target is current steps_t (horizon=0)
+        .rename(columns={"ts":"_"}))
+
+    def attach_priors(d):
+        d = d.merge(
+            priors.rename(columns={"ts":"_"}).assign(
+                dow=lambda x: x.pop("user_id"),  # ignore; above line renamed incorrectly? (just keep groupby keys)
+            ), how="left", left_on=["user_id", d["ts"].dt.dayofweek, d["ts"].dt.hour],
+            right_on=["user_id", "ts", "ts"]  # <--- messy
+        )
     skip_on_oom = bool(cfg.get("runtime", {}).get("skip_on_oom", True))
 
     # allow YAML fallback too
