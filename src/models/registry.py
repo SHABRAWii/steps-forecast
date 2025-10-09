@@ -81,9 +81,10 @@ def make_model(name: str, random_state=42, n_jobs=-1):
     # ---- Blended HGB-MAE (base + peak-weighted) -----------------------------
     if name == "hgb_mae_blend":
         return HGBMAEBlendPeak(
-            alpha=0.8,           # you can adjust later
-            low=80, high=400,    # mid-peak band to emphasize
-            max_w=1.5,           # gentle up-weight
+            alpha=0.8,      # try 0.7–0.9
+            k=200.0,        # try 150–300
+            power=1.0,      # try 0.7–1.3
+            cap=3.0,        # start gentler than 5.0 if tol-acc drops
             learning_rate=0.06,
             max_iter=400,
             max_depth=None,
@@ -91,37 +92,31 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             max_bins=255,
             random_state=random_state,
         )
+
     raise ValueError(f"Unknown model: {name}")
 
-def _peak_weights(y, low=80, high=400, max_w=1.5):
+def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):
     """
-    Gentle, selective weights:
-    - weight=1 below `low`
-    - ramps linearly up to `max_w` at `high`
-    - weight=1 again above `high` (don’t chase extreme outliers)
+    Your weighting: w = 1 + min((|y|/k)^power, cap)
+    - Up-weights larger targets smoothly.
+    - `k` is the scale (steps) where weights start to grow.
+    - `cap` limits how large the weight can get.
     """
-    import numpy as np
     y = np.asarray(y, dtype="float32")
-    w = np.ones_like(y, dtype="float32")
-    mask = (y >= low) & (y <= high)
-    w[mask] = 1.0 + (max_w - 1.0) * ((y[mask] - low) / (high - low))
-    return w
-
-
+    w = 1.0 + np.minimum((np.abs(y) / float(k)) ** float(power), float(cap))
+    return w.astype("float32")
 class HGBMAEBlendPeak(BaseEstimator, RegressorMixin):
     """
-    Two HGB-MAE models:
-      - base: unweighted
-      - peak: trained with selective sample weights
-    Predicts alpha * base + (1 - alpha) * peak.
+    Blend of two HGB-MAE models:
+      - base: unweighted MAE model
+      - peak: same model, trained with your power-law sample weights
+    Prediction: ŷ = alpha * ŷ_base + (1 - alpha) * ŷ_peak
     """
 
     def __init__(
         self,
-        alpha=0.8,                  # blend weight towards base (0.5..0.9 is typical)
-        # weighting params
-        low=80, high=400, max_w=1.5,
-        # HGB params (kept modest; tweak if desired)
+        alpha=0.8,                 # blend weight toward base (0.5..0.9)
+        k=200.0, power=1.0, cap=5.0,   # <-- your weighting params
         learning_rate=0.06,
         max_iter=400,
         max_depth=None,
@@ -130,9 +125,9 @@ class HGBMAEBlendPeak(BaseEstimator, RegressorMixin):
         random_state=42,
     ):
         self.alpha = alpha
-        self.low = low
-        self.high = high
-        self.max_w = max_w
+        self.k = k
+        self.power = power
+        self.cap = cap
         self.learning_rate = learning_rate
         self.max_iter = max_iter
         self.max_depth = max_depth
@@ -145,7 +140,6 @@ class HGBMAEBlendPeak(BaseEstimator, RegressorMixin):
 
     def fit(self, X, y):
         from sklearn.ensemble import HistGradientBoostingRegressor
-        import numpy as np
 
         self.base_ = HistGradientBoostingRegressor(
             loss="absolute_error",
@@ -167,12 +161,11 @@ class HGBMAEBlendPeak(BaseEstimator, RegressorMixin):
             max_bins=self.max_bins,
             random_state=self.random_state,
         )
-        w = _peak_weights(y, low=self.low, high=self.high, max_w=self.max_w)
+        w = _peak_weights_pow(y, k=self.k, power=self.power, cap=self.cap)
         self.peak_.fit(X, y, sample_weight=w)
         return self
 
     def predict(self, X):
-        import numpy as np
         yb = self.base_.predict(X)
         yp = self.peak_.predict(X)
         return self.alpha * yb + (1.0 - self.alpha) * yp
