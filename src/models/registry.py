@@ -110,7 +110,7 @@ def make_model(name: str, random_state=42, n_jobs=-1):
     if name == "hgb_q80_auto_fast":
         # Example: use 6 parallel workers and 1 math thread each (adjust to your CPU)
         return AutoQ80(cv_splits=5, random_state=random_state,
-                       verbose=1, outer_n_jobs=6, inner_threads=1, parallelize="combos")
+                       verbose=3, outer_n_jobs=6, inner_threads=1, parallelize="combos")
     if name == "hgb_q80_auto_v":  # verbose but sequential
         return AutoQ80(cv_splits=5, random_state=random_state, verbose=2, parallelize="off")
     if name == "hgb_q80_auto":    # default
