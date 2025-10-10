@@ -9,3 +9,6 @@ pyarrow
 lightgbm
 xgboost
 catboost
+torch 
+torchvision 
+torchaudio

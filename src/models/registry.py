@@ -15,6 +15,7 @@ from src.models.instances.autoQ80 import AutoQ80
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from xgboost import XGBRegressor
+from src.models.torch_regressors import NeuralRegressor
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -210,6 +211,30 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             n_jobs=n_jobs,
             random_state=random_state,
         )
+    # --- new neural models ---
+    if name == "mlp_mae":
+        return NeuralRegressor(model_type="mlp", loss="mae",
+                               hidden=256, depth=3, dropout=0.1,
+                               lr=1e-3, epochs=40, batch_size=2048,
+                               patience=6, device="auto", verbose=1)
+
+    if name == "mlp_q80":
+        return NeuralRegressor(model_type="mlp", loss="quantile", tau=0.80,
+                               hidden=256, depth=3, dropout=0.1,
+                               lr=1e-3, epochs=50, batch_size=2048,
+                               patience=8, device="auto", verbose=1)
+
+    if name == "tcn_mae":
+        return NeuralRegressor(model_type="tcn", loss="mae",
+                               hidden=64, tcn_layers=5, tcn_kernel=3, dropout=0.1,
+                               lr=1e-3, epochs=50, batch_size=2048,
+                               patience=8, device="auto", verbose=1)
+
+    if name == "tcn_q80":
+        return NeuralRegressor(model_type="tcn", loss="quantile", tau=0.80,
+                               hidden=64, tcn_layers=5, tcn_kernel=3, dropout=0.1,
+                               lr=1e-3, epochs=60, batch_size=2048,
+                               patience=10, device="auto", verbose=1)
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):
