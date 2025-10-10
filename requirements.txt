@@ -6,3 +6,6 @@ pyyaml
 matplotlib
 joblib
 pyarrow
+lightgbm
+xgboost
+catboost
