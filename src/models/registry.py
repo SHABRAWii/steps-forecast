@@ -238,11 +238,14 @@ def make_model(name: str, random_state=42, n_jobs=-1):
                                lr=1e-3, epochs=60, batch_size=2048,
                                patience=10, device="auto", verbose=1)
     if name == "ens_tol50":
-    # blend LGBM Poisson (log1p) + CatBoost MAE (your two best kinds)
+        # Blend two strong families you already tried
         return EnsembleTolK(
             base_names=["lgbm_poisson_log1p", "cat_mae"],
-            k=50, cv_splits=3, alphas=[0.0, 0.25, 0.5, 0.75, 1.0],
-            random_state=random_state, verbose=1
+            k=50,
+            cv_splits=3,
+            alphas=[0.0, 0.25, 0.5, 0.75, 1.0],
+            random_state=random_state,
+            verbose=3,
         )
     raise ValueError(f"Unknown model: {name}")
 
