@@ -46,9 +46,13 @@ def wape(y, yhat):
         return np.nan
     return float(np.abs(y - yhat).sum() / denom)
 
-def smape(y, yhat):
-    y = np.asarray(y)
-    yhat = np.asarray(yhat)
-    denom = np.abs(y) + np.abs(yhat)
-    denom = np.where(denom == 0, 1.0, denom)  # avoid /0 when both zero
-    return float(np.mean(2.0 * np.abs(y - yhat) / denom))
+def smape(y_true, y_pred, eps=1.0):
+    y_true = np.asarray(y_true, float)
+    y_pred = np.asarray(y_pred, float)
+    denom = np.maximum(np.abs(y_true) + np.abs(y_pred) + eps, eps)
+    return 200.0 * np.mean(np.abs(y_pred - y_true) / denom)
+def mape_safe(y_true, y_pred, eps=10.0):
+    # denominator floored at eps steps
+    y_true = np.asarray(y_true, float)
+    y_pred = np.asarray(y_pred, float)
+    return 100.0 * np.mean(np.abs(y_pred - y_true) / np.maximum(np.abs(y_true), eps))
