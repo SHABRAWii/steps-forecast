@@ -247,6 +247,17 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             random_state=random_state,
             verbose=3,
         )
+    if name == "mlp_tol50":
+        return NeuralRegressor(model_type="mlp", loss="tol", tol_k=50.0, tol_power=1.0,
+                            hidden=256, depth=3, dropout=0.1,
+                            lr=1e-3, epochs=60, batch_size=4096, patience=10,
+                            device="auto", verbose=1)
+
+    if name == "tcn_tol50":
+        return NeuralRegressor(model_type="tcn", loss="tol", tol_k=50.0, tol_power=1.0,
+                            hidden=96, tcn_layers=6, tcn_kernel=3, dropout=0.1,
+                            lr=1e-3, epochs=80, batch_size=4096, patience=12,
+                            device="auto", verbose=1)
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):

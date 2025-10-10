@@ -60,11 +60,13 @@ models:
   # - name: "cat_mae"
   # - name: "xgb_poisson"
   # - name: "xgb_huber"
-  
-  - name: "mlp_mae"
-  - name: "mlp_q80"
-  - name: "tcn_mae"
-  - name: "tcn_q80"
+
+  # - name: "mlp_mae"
+  # - name: "mlp_q80"
+  # - name: "tcn_mae"
+  # - name: "tcn_q80"
+  - name: "tcn_tol50"
+  - name: "mlp_tol50"
 
 # ===== Evaluation / runtime =====
 eval:

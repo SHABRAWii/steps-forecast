@@ -9,6 +9,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.base import BaseEstimator, RegressorMixin
 
 # --------- utilities ---------
+# add near other losses
+def _deadzone_loss(y_hat, y, eps=50.0, p=1.0):
+    # L = ReLU(|e| - eps)^p ; choose p=1 (L1) or p=2 (smoother)
+    e = torch.abs(y_hat - y)
+    dz = torch.relu(e - eps)
+    return torch.mean(dz**p)
+
 def _device(auto: str = "auto") -> torch.device:
     if auto != "auto":
         return torch.device(auto)
@@ -125,6 +132,8 @@ class NeuralRegressor(BaseEstimator, RegressorMixin):
     def __init__(self,
                  model_type: str = "mlp",          # "mlp" or "tcn"
                  loss: str = "mae",                # "mae" or "quantile"
+                 tol_k: float = 50.0,
+                 tol_power: float = 1.0,
                  tau: float = 0.80,
                  epochs: int = 40,
                  batch_size: int = 2048,
@@ -196,7 +205,10 @@ class NeuralRegressor(BaseEstimator, RegressorMixin):
     def _criterion(self):
         if self.loss == "quantile":
             return lambda yhat, y: _pinball_loss(yhat, y, self.tau)
+        if self.loss == "tol":
+            return lambda yhat, y: _deadzone_loss(yhat, y, self.tol_k, self.tol_power)
         return _mae_loss
+
 
     def _to_tensor(self, X, y=None):
         X = torch.tensor(X, dtype=torch.float32)
