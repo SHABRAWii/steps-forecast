@@ -6,14 +6,17 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.base import BaseEstimator, RegressorMixin
 
 # ----- losses -----
-def pinball(y_hat, y, tau=0.8):
+def pinball(y_hat, y, tau=0.8, reduce="mean"):
     d = y - y_hat
-    return torch.mean(torch.maximum(tau*d, (tau-1.0)*d))
+    l = torch.maximum(tau*d, (tau-1.0)*d)  # shape [B]
+    return l.mean() if reduce=="mean" else l
 
-def deadzone(y_hat, y, eps=50.0, p=1.0):
+def deadzone(y_hat, y, eps=50.0, p=1.0, reduce="mean"):
     e = torch.abs(y_hat - y)
     z = torch.relu(e - eps)
-    return torch.mean(z**p)
+    l = z**p  # shape [B]
+    return l.mean() if reduce=="mean" else l
+
 
 # ----- tiny backbones -----
 class MLP(nn.Module):
@@ -116,7 +119,10 @@ class NeuralMoE(BaseEstimator, RegressorMixin):
                 xb = xb.to(self.device_, non_blocking=True); yb = yb.to(self.device_, non_blocking=True)
                 opt.zero_grad(set_to_none=True)
                 yhat, y_tol, y_q, g = forward(xb)
-                L = g*deadzone(y_tol, yb, self.tol_k, self.tol_power) + (1-g)*pinball(y_q, yb, self.q)
+                l_tol = deadzone(y_tol, yb, self.tol_k, self.tol_power, reduce="none")  # [B]
+                l_q   = pinball(y_q,   yb, self.q,                     reduce="none")   # [B]
+                mix   = g * l_tol + (1.0 - g) * l_q                                  # [B]
+                L     = mix.mean()
 
                 # weak supervision for gate (optional but helps)
                 active = (yb >= self.thr_active).float()
@@ -135,7 +141,10 @@ class NeuralMoE(BaseEstimator, RegressorMixin):
                 for xb, yb in va_ld:
                     xb = xb.to(self.device_, non_blocking=True); yb = yb.to(self.device_, non_blocking=True)
                     yhat, y_tol, y_q, g = forward(xb)
-                    L = g*deadzone(y_tol, yb, self.tol_k, self.tol_power) + (1-g)*pinball(y_q, yb, self.q)
+                    l_tol = deadzone(y_tol, yb, self.tol_k, self.tol_power, reduce="none")
+                    l_q   = pinball(y_q,   yb, self.q,                     reduce="none")
+                    mix   = g * l_tol + (1.0 - g) * l_q
+                    L     = mix.mean()
                     active = (yb >= self.thr_active).float()
                     bce = nn.functional.binary_cross_entropy(g, active)
                     va_loss += (L + self.beta_gate*bce).item()*xb.size(0)
