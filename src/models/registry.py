@@ -14,6 +14,7 @@ import numpy as np
 from src.models.instances.autoQ80 import AutoQ80
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
+from xgboost import XGBRegressor
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -180,6 +181,34 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             random_seed=random_state,
             thread_count=n_jobs,
             verbose=False
+        )
+    if name == "xgb_poisson":
+        return XGBRegressor(
+            objective="count:poisson",
+            tree_method="hist",
+            learning_rate=0.05,
+            n_estimators=1500,
+            max_depth=8,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=1.0,
+            n_jobs=n_jobs,
+            random_state=random_state,
+        )
+
+    if name == "xgb_huber":
+        # Huber via pseudo-Huber (uses reg:pseudohubererror in recent xgboost versions; else squared + robust features)
+        return XGBRegressor(
+            objective="reg:pseudohubererror",
+            tree_method="hist",
+            learning_rate=0.05,
+            n_estimators=1500,
+            max_depth=8,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=1.0,
+            n_jobs=n_jobs,
+            random_state=random_state,
         )
     raise ValueError(f"Unknown model: {name}")
 

@@ -57,6 +57,8 @@ models:
   - name: "lgbm_poisson_log1p"
   - name: "cat_q80"
   - name: "cat_mae"
+  - name: "xgb_poisson"
+  - name: "xgb_huber"
 
 # ===== Evaluation / runtime =====
 eval:
