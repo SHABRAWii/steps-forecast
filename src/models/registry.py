@@ -17,6 +17,7 @@ from catboost import CatBoostRegressor
 from xgboost import XGBRegressor
 from src.models.instances.torch_regressors import NeuralRegressor
 from src.models.instances.ensemble_tol import EnsembleTolK
+from src.models.instances.neural_moe import NeuralMoE
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -266,7 +267,16 @@ def make_model(name: str, random_state=42, n_jobs=-1):
                             hidden=128, tcn_layers=7, tcn_kernel=3, dropout=0.15,
                             lr=7e-4, epochs=100, batch_size=8192, patience=12,
                             device="auto", verbose=1)
-
+    if name == "moe_tol_q80":
+        return NeuralMoE(  # defaults tuned for GPU; adjust batch_size on CPU
+            tol_k=50.0, tol_power=1.0, q=0.80,
+            thr_active=60.0, beta_gate=0.2,
+            hidden=256, depth=3, gate_hidden=64, dropout=0.1,
+            lr=1e-3, weight_decay=1e-5,
+            epochs=80, batch_size=4096,
+            val_frac=0.1, patience=10,
+            device="auto", verbose=1
+        )
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):
