@@ -6,14 +6,14 @@ import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.model_selection import TimeSeriesSplit
 
-# We import make_model at module scope so joblib can pickle this class cleanly.
-from src.models.registry import make_model
 
-
-def _tol_accuracy(y_true: np.ndarray, y_pred: np.ndarray, k: int = 50) -> float:
+def _tol_accuracy(y_true: np.ndarray, y_pred: np.ndarray, k: int) -> float:
+    """
+    Tolerance accuracy: fraction of predictions within ±k of the true value.
+    """
     y_true = np.asarray(y_true, dtype=np.float32)
     y_pred = np.asarray(y_pred, dtype=np.float32)
-    return float(np.mean(np.abs(y_true - y_pred) <= k))
+    return float(np.mean(np.abs(y_true - y_pred) <= float(k)))
 
 
 class EnsembleTolK(BaseEstimator, RegressorMixin):
@@ -39,7 +39,7 @@ class EnsembleTolK(BaseEstimator, RegressorMixin):
     verbose : int
         0 = silent, 1 = prints selection summary.
     maker : Callable | None
-        Optional alternate factory; defaults to src.models.registry.make_model.
+        Optional alternate factory; defaults to src.models.registry.make_model (lazy-imported).
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class EnsembleTolK(BaseEstimator, RegressorMixin):
         self.alphas = alphas if alphas is not None else [0.0, 0.25, 0.5, 0.75, 1.0]
         self.random_state = random_state
         self.verbose = verbose
-        self.maker = maker  # if None, we use registry.make_model
+        self.maker = maker  # if None, we lazy-import registry.make_model
 
         # fitted members
         self.bases_ = None
@@ -69,13 +69,20 @@ class EnsembleTolK(BaseEstimator, RegressorMixin):
         if self.verbose:
             print("[EnsembleTolK]", *args, flush=True)
 
+    def _factory(self) -> Callable[..., object]:
+        if self.maker is not None:
+            return self.maker
+        # Lazy import here to avoid circular import at module load time
+        from src.models.registry import make_model
+        return make_model
+
     # --- sklearn API ---
     def fit(self, X, y):
         X = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.float32)
 
-        # 1) build base models from registry
-        factory = self.maker if self.maker is not None else make_model
+        # 1) build base models from registry (lazily)
+        factory = self._factory()
         self.bases_ = [clone(factory(nm, random_state=self.random_state)) for nm in self.base_names]
 
         # 2) inner split: use last fold as validation to pick weights

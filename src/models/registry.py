@@ -237,15 +237,16 @@ def make_model(name: str, random_state=42, n_jobs=-1):
                                hidden=64, tcn_layers=5, tcn_kernel=3, dropout=0.1,
                                lr=1e-3, epochs=60, batch_size=2048,
                                patience=10, device="auto", verbose=1)
-    if name == "ens_tol50":
-        # Blend two strong families you already tried
+    if name == "ensemble_tol":
+        # choose the bases you want to blend for Tol@k
         return EnsembleTolK(
-            base_names=["lgbm_poisson_log1p", "cat_mae"],
+            base_names=["lgbm_poisson_log1p", "hgb_q80_auto_fast"],
             k=50,
             cv_splits=3,
-            alphas=[0.0, 0.25, 0.5, 0.75, 1.0],
+            alphas=[0.0, 0.25, 0.5, 0.65, 0.75, 0.85, 1.0],
             random_state=random_state,
-            verbose=3,
+            verbose=1,
+            maker=None,   # None => lazy import make_model inside
         )
     if name == "mlp_tol50":
         return NeuralRegressor(model_type="mlp", loss="tol", tol_k=50.0, tol_power=1.0,

@@ -54,7 +54,7 @@ models:
   # - name: "hgb_mae_qblend"   # blended
   # - name: "hgb_q80_auto"      # auto-tuned q=0.8
 
-  - name: "ens_tol50"
+  - name: "ensemble_tol"
   - name: "lgbm_poisson_log1p"
   - name: "xgb_huber"
   - name: "cat_mae"
