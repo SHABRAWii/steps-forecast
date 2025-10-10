@@ -152,6 +152,8 @@ class NeuralRegressor(BaseEstimator, RegressorMixin):
         self.model_type = model_type
         self.loss = loss
         self.tau = tau
+        self.tol_k = tol_k
+        self.tol_power = tol_power
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
@@ -246,7 +248,12 @@ class NeuralRegressor(BaseEstimator, RegressorMixin):
 
     # ---- sklearn API ----
     def fit(self, X, y):
-        X = np.asarray(X, dtype=np.float32)
+        if hasattr(X, "columns"):
+            self.columns_ = list(X.columns)         # keep pandas column names
+            X_np = X.to_numpy(dtype=np.float32)     # then convert
+        else:
+            self.columns_ = [f"f{i}" for i in range(np.asarray(X).shape[1])]
+            X_np = np.asarray(X, dtype=np.float32)
         y = np.asarray(y, dtype=np.float32).reshape(-1)
         self.columns_ = getattr(X, "columns", None)
         if self.columns_ is None:

@@ -67,6 +67,7 @@ models:
   # - name: "tcn_q80"
   - name: "tcn_tol50"
   - name: "mlp_tol50"
+  - name: "tcn_mae_big"
 
 # ===== Evaluation / runtime =====
 eval:
