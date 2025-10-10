@@ -52,7 +52,9 @@ models:
   # - name: "hgb_mae"
   # - name: "hgb_q80"          # see it alone
   # - name: "hgb_mae_qblend"   # blended
-  - name: "hgb_q80_auto"      # auto-tuned q=0.8
+  # - name: "hgb_q80_auto"      # auto-tuned q=0.8
+  - name: "lgbm_q80"
+  - name: "lgbm_poisson_log1p"
 
 # ===== Evaluation / runtime =====
 eval:

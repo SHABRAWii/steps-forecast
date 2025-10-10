@@ -12,6 +12,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostin
 from sklearn.base import BaseEstimator, RegressorMixin
 import numpy as np
 from src.models.instances.autoQ80 import AutoQ80
+from lightgbm import LGBMRegressor
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -115,6 +116,44 @@ def make_model(name: str, random_state=42, n_jobs=-1):
         return AutoQ80(cv_splits=5, random_state=random_state, verbose=2, parallelize="off")
     if name == "hgb_q80_auto":    # default
         return AutoQ80(cv_splits=5, random_state=random_state, verbose=0)
+    if name == "lgbm_q80":
+        # Quantile regression at 0.8 (Q80)
+        return LGBMRegressor(
+            objective="quantile",
+            alpha=0.80,
+            learning_rate=0.05,
+            n_estimators=1200,
+            num_leaves=63,
+            min_child_samples=80,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=1.0,
+            n_jobs=n_jobs,
+            random_state=random_state,
+        )
+
+    if name == "lgbm_poisson_log1p":
+        # Poisson for nonnegative counts; we do log1p transform to stabilize
+        class LGBMPoissonLog1p(TransformedTargetRegressor):
+            def __init__(self, **kw):
+                base = LGBMRegressor(
+                    objective="poisson",
+                    learning_rate=kw.pop("learning_rate", 0.05),
+                    n_estimators=kw.pop("n_estimators", 1200),
+                    num_leaves=kw.pop("num_leaves", 63),
+                    min_child_samples=kw.pop("min_child_samples", 80),
+                    subsample=kw.pop("subsample", 0.8),
+                    colsample_bytree=kw.pop("colsample_bytree", 0.8),
+                    reg_lambda=kw.pop("reg_lambda", 1.0),
+                    n_jobs=kw.pop("n_jobs", n_jobs),
+                    random_state=kw.pop("random_state", random_state),
+                )
+                super().__init__(
+                    regressor=base,
+                    func=lambda y: np.log1p(np.clip(y, 0, None)),
+                    inverse_func=lambda z: np.expm1(z),
+                )
+        return LGBMPoissonLog1p()
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):
