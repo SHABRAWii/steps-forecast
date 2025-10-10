@@ -2,10 +2,11 @@ import numpy as np
 
 def mae(y, yhat):  return float(np.mean(np.abs(y - yhat)))
 def rmse(y, yhat): return float(np.sqrt(np.mean((y - yhat)**2)))
-def mape(y, yhat):
-    y = np.asarray(y); yhat = np.asarray(yhat)
-    denom = np.clip(np.abs(y), 1e-6, None)
-    return float(np.mean(np.abs((y - yhat) / denom) * 100))
+def mape(y_true, y_pred, eps=1e-6):
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom = np.maximum(np.abs(y_true), eps)   # avoid div by zero
+    return float(np.mean(np.abs((y_true - y_pred) / denom))) * 100.0
 def r2(y, yhat):
     y = np.asarray(y); yhat = np.asarray(yhat)
     ss_res = np.sum((y - yhat)**2)
