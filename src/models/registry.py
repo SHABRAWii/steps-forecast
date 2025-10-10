@@ -16,6 +16,7 @@ from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from xgboost import XGBRegressor
 from src.models.instances.torch_regressors import NeuralRegressor
+from src.models.instances.ensemble_tol import EnsembleTolK
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -141,10 +142,10 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             def __init__(self, **kw):
                 base = LGBMRegressor(
                     objective="poisson",
-                    learning_rate=kw.pop("learning_rate", 0.05),
-                    n_estimators=kw.pop("n_estimators", 1200),
-                    num_leaves=kw.pop("num_leaves", 63),
-                    min_child_samples=kw.pop("min_child_samples", 80),
+                    learning_rate=kw.pop("learning_rate", 0.04),
+                    n_estimators=kw.pop("n_estimators", 1800),
+                    num_leaves=kw.pop("num_leaves", 127),
+                    min_child_samples=kw.pop("min_child_samples", 40),
                     subsample=kw.pop("subsample", 0.8),
                     colsample_bytree=kw.pop("colsample_bytree", 0.8),
                     reg_lambda=kw.pop("reg_lambda", 1.0),
@@ -163,8 +164,8 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             loss_function="Quantile:alpha=0.8",
             learning_rate=0.05,
             depth=8,
-            l2_leaf_reg=3.0,
-            iterations=2000,
+            l2_leaf_reg=7.0,
+            iterations=2500,
             subsample=0.9,
             random_seed=random_state,
             thread_count=n_jobs,
@@ -176,8 +177,8 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             loss_function="MAE",
             learning_rate=0.05,
             depth=8,
-            l2_leaf_reg=3.0,
-            iterations=2000,
+            l2_leaf_reg=7.0,
+            iterations=2500,
             subsample=0.9,
             random_seed=random_state,
             thread_count=n_jobs,
@@ -203,13 +204,14 @@ def make_model(name: str, random_state=42, n_jobs=-1):
             objective="reg:pseudohubererror",
             tree_method="hist",
             learning_rate=0.05,
-            n_estimators=1500,
+            n_estimators=2000,
             max_depth=8,
             subsample=0.8,
             colsample_bytree=0.8,
             reg_lambda=1.0,
             n_jobs=n_jobs,
             random_state=random_state,
+            min_child_weight=4,
         )
     # --- new neural models ---
     if name == "mlp_mae":
@@ -235,6 +237,13 @@ def make_model(name: str, random_state=42, n_jobs=-1):
                                hidden=64, tcn_layers=5, tcn_kernel=3, dropout=0.1,
                                lr=1e-3, epochs=60, batch_size=2048,
                                patience=10, device="auto", verbose=1)
+    if name == "ens_tol50":
+    # blend LGBM Poisson (log1p) + CatBoost MAE (your two best kinds)
+        return EnsembleTolK(
+            base_names=["lgbm_poisson_log1p", "cat_mae"],
+            k=50, cv_splits=3, alphas=[0.0, 0.25, 0.5, 0.75, 1.0],
+            random_state=random_state, verbose=1
+        )
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):
