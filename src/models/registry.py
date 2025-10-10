@@ -13,6 +13,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 import numpy as np
 from src.models.instances.autoQ80 import AutoQ80
 from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
@@ -154,6 +155,32 @@ def make_model(name: str, random_state=42, n_jobs=-1):
                     inverse_func=lambda z: np.expm1(z),
                 )
         return LGBMPoissonLog1p()
+    if name == "cat_q80":
+        # Native quantile loss; good with categorical features if you add them later
+        return CatBoostRegressor(
+            loss_function="Quantile:alpha=0.8",
+            learning_rate=0.05,
+            depth=8,
+            l2_leaf_reg=3.0,
+            iterations=2000,
+            subsample=0.9,
+            random_seed=random_state,
+            thread_count=n_jobs,
+            verbose=False
+        )
+
+    if name == "cat_mae":
+        return CatBoostRegressor(
+            loss_function="MAE",
+            learning_rate=0.05,
+            depth=8,
+            l2_leaf_reg=3.0,
+            iterations=2000,
+            subsample=0.9,
+            random_seed=random_state,
+            thread_count=n_jobs,
+            verbose=False
+        )
     raise ValueError(f"Unknown model: {name}")
 
 def _peak_weights_pow(y, k=200.0, power=1.0, cap=5.0):

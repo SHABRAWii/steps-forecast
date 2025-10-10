@@ -55,6 +55,8 @@ models:
   # - name: "hgb_q80_auto"      # auto-tuned q=0.8
   - name: "lgbm_q80"
   - name: "lgbm_poisson_log1p"
+  - name: "cat_q80"
+  - name: "cat_mae"
 
 # ===== Evaluation / runtime =====
 eval:
