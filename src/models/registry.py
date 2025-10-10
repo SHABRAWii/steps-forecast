@@ -15,7 +15,7 @@ from src.models.instances.autoQ80 import AutoQ80
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from xgboost import XGBRegressor
-from src.models.torch_regressors import NeuralRegressor
+from src.models.instances.torch_regressors import NeuralRegressor
 
 
 def make_model(name: str, random_state=42, n_jobs=-1):
