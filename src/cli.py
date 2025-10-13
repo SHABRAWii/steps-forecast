@@ -12,7 +12,8 @@ def main():
           "python","-m","src.data.make_dataset",
           "--mat", cfg["data"]["raw_mat_path"],
           "--varname", cfg["data"].get("varname","DataComplete"),
-          "--out", cfg["data"]["processed_path"].replace(".parquet", "_raw.parquet")
+          "--out", cfg["data"]["processed_path"].replace(".parquet", "_raw.parquet"),
+          "--min_days", str(cfg["data"].get("min_days_for_training", 50))
         ]
     elif a.cmd == "features":
         inp = cfg["data"]["processed_path"].replace(".parquet", "_raw.parquet")
