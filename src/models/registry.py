@@ -18,17 +18,37 @@ from xgboost import XGBRegressor
 from src.models.instances.torch_regressors import NeuralRegressor
 from src.models.instances.ensemble_tol import EnsembleTolK
 from src.models.instances.neural_moe import NeuralMoE
+import numpy as np
+from sklearn.compose import TransformedTargetRegressor
 
-def make_lgbm_poisson_log1p(random_state=42, n_jobs=-1,
-                            learning_rate=0.04, n_estimators=1800,
-                            num_leaves=127, min_child_samples=40,
-                            subsample=0.8, colsample_bytree=0.8,
-                            reg_lambda=1.0):
+try:
+    from lightgbm import LGBMRegressor
+except Exception:
+    LGBMRegressor = None
+
+
+# ---- Pickle-safe target transforms (NO lambdas) ----------------------------
+def _log1p_clip_nonneg(y: np.ndarray) -> np.ndarray:
+    y = np.asarray(y)
+    return np.log1p(np.clip(y, 0, None))
+
+def _expm1_clip_nonneg(z: np.ndarray) -> np.ndarray:
+    z = np.asarray(z)
+    # Guard against tiny negatives from float noise
+    return np.maximum(np.expm1(z), 0.0)
+
+def make_lgbm_poisson_log1p(
+    random_state=42, n_jobs=-1,
+    learning_rate=0.04, n_estimators=1800,
+    num_leaves=127, min_child_samples=40,
+    subsample=0.8, colsample_bytree=0.8,
+    reg_lambda=1.0,
+):
     if LGBMRegressor is None:
         raise ImportError("lightgbm is not installed.")
 
     base = LGBMRegressor(
-        objective="poisson",
+        objective="poisson",            # good for nonnegative counts
         learning_rate=learning_rate,
         n_estimators=n_estimators,
         num_leaves=num_leaves,
@@ -39,11 +59,11 @@ def make_lgbm_poisson_log1p(random_state=42, n_jobs=-1,
         n_jobs=n_jobs,
         random_state=random_state,
     )
-    # log1p/expm1 on target for stability; clip negatives to 0
+    # Pickle-safe named functions (no lambdas)
     return TransformedTargetRegressor(
         regressor=base,
-        func=lambda y: np.log1p(np.clip(y, 0, None)),
-        inverse_func=lambda z: np.expm1(z),
+        func=_log1p_clip_nonneg,
+        inverse_func=_expm1_clip_nonneg,
         check_inverse=False,
     )
 
@@ -166,17 +186,16 @@ def make_model(name: str, random_state=42, n_jobs=-1):
 
     if name == "lgbm_poisson_log1p":
         return make_lgbm_poisson_log1p(
-        random_state=random_state,
-        n_jobs=n_jobs,
-        # you can pass overrides here if you want
-        learning_rate=0.04,
-        n_estimators=1800,
-        num_leaves=127,
-        min_child_samples=40,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_lambda=1.0,
-    )
+            random_state=random_state,
+            n_jobs=n_jobs,
+            learning_rate=0.04,
+            n_estimators=1800,
+            num_leaves=127,
+            min_child_samples=40,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_lambda=1.0,
+        )
         # # Poisson for nonnegative counts; we do log1p transform to stabilize
         # class LGBMPoissonLog1p(TransformedTargetRegressor):
         #     def __init__(self, **kw):
