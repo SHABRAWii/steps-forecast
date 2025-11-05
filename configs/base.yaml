@@ -51,6 +51,8 @@ features:
 models:
   # - name: "naive_last"            # baseline: ŷ = steps_lag1
   - name: "averaging"   
+  - name: "median"
+  - name: "mode"
   # - name: "ridge"
   # - name: "ridge_sgd"
   # - name: "rf200"
