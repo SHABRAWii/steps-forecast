@@ -1,0 +1,8 @@
+data:
+  mat_path: data/interim/DataStepsOmar_complete_compat.mat
+  varname: DataComplete
+analysis:
+  slot_mins: 22.5
+  active_thr: 50.0
+runtime:
+  out_dir: analyze/runs
