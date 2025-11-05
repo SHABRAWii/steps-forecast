@@ -12,3 +12,4 @@ catboost
 torch 
 torchvision 
 torchaudio
+openpyxl
