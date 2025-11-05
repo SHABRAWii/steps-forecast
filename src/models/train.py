@@ -203,6 +203,73 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
             yhat_te = te["steps_lag1"].to_numpy()
             model = None
             model_path = None
+        elif name.lower() == "averaging":
+            def _extract_calendar(df_slice: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+                if {"dow", "hour"}.issubset(df_slice.columns):
+                    return df_slice["dow"], df_slice["hour"]
+                if "ts" in df_slice.columns:
+                    ts = pd.to_datetime(df_slice["ts"], errors="coerce")
+                    return ts.dt.dayofweek, ts.dt.hour
+                raise ValueError(
+                    "Averaging baseline requires 'dow'/'hour' columns or a timestamp column 'ts'."
+                )
+
+            dow_tr, hour_tr = _extract_calendar(tr)
+            train_cal = (
+                pd.DataFrame(
+                    {
+                        "dow": dow_tr,
+                        "hour": hour_tr,
+                        "steps_t": tr["steps_t"],
+                    }
+                )
+                .dropna(subset=["steps_t"])
+                .dropna(subset=["dow", "hour"])
+                .copy()
+            )
+            if train_cal.empty:
+                print("[WARN] Averaging baseline: no calendar information in training data; using global mean only.")
+            else:
+                train_cal["dow"] = train_cal["dow"].astype(int)
+                train_cal["hour"] = train_cal["hour"].astype(int)
+
+            avg_lookup = (
+                train_cal.groupby(["dow", "hour"], dropna=False)["steps_t"].mean()
+                if not train_cal.empty
+                else pd.Series(dtype="float64")
+            )
+
+            if not train_cal.empty:
+                global_mean = float(train_cal["steps_t"].mean())
+            else:
+                raw_mean = float(tr["steps_t"].mean()) if "steps_t" in tr else float("nan")
+                global_mean = raw_mean if not np.isnan(raw_mean) else 0.0
+
+            def _predict_avg(df_slice: pd.DataFrame) -> np.ndarray:
+                dow_series, hour_series = _extract_calendar(df_slice)
+                dow_arr = pd.to_numeric(dow_series, errors="coerce").to_numpy()
+                hour_arr = pd.to_numeric(hour_series, errors="coerce").to_numpy()
+                preds = np.full(len(df_slice), global_mean, dtype="float64")
+                valid_mask = ~(np.isnan(dow_arr) | np.isnan(hour_arr))
+                if valid_mask.any() and not avg_lookup.empty:
+                    keys = pd.MultiIndex.from_arrays(
+                        [dow_arr[valid_mask].astype(int), hour_arr[valid_mask].astype(int)],
+                        names=["dow", "hour"],
+                    )
+                    looked_up = avg_lookup.reindex(keys).to_numpy()
+                    if looked_up.size:
+                        missing_mask = np.isnan(looked_up)
+                        if missing_mask.any():
+                            looked_up = looked_up.astype("float64", copy=True)
+                            looked_up[missing_mask] = global_mean
+                        preds[valid_mask] = looked_up
+                return preds.astype("float32")
+
+            yhat_tr = _predict_avg(tr) if len(tr) else None
+            yhat_va = _predict_avg(va)
+            yhat_te = _predict_avg(te)
+            model = None
+            model_path = None
         else:
             model_path = Path(run_dir) / "artifacts" / f"{name}.joblib"
             yhat_tr = None
