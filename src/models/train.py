@@ -5,6 +5,7 @@ import joblib, gc
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import argparse, time
 import yaml, joblib
 import pandas as pd, numpy as np
@@ -71,6 +72,115 @@ def plot_preds(y: np.ndarray, yhat: np.ndarray, path: Path, n: int = 500):
     path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(path, bbox_inches="tight")
     plt.close()
+
+
+def plot_weekly_gap_example(
+    df: pd.DataFrame,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    path: Path,
+    rng_seed: int = 0,
+    max_days: int = 7,
+) -> None:
+    """Create a weekly plot for the *third* eligible user with a hidden segment replaced by predictions."""
+
+    if df is None or len(df) == 0:
+        return
+    required_cols = {"user_id", "ts"}
+    if not required_cols.issubset(df.columns):
+        return
+
+    # Align arrays with dataframe order and keep only relevant columns
+    aligned = df.reset_index(drop=True).copy()
+    if len(aligned) != len(y_true) or len(aligned) != len(y_pred):
+        return
+
+    if "steps" in aligned.columns:
+        aligned["true_steps"] = aligned["steps"].to_numpy()
+    elif "steps_t" in aligned.columns:
+        aligned["true_steps"] = aligned["steps_t"].to_numpy()
+    else:
+        aligned["true_steps"] = y_true
+
+    aligned["pred_steps"] = y_pred
+    aligned["ts"] = pd.to_datetime(aligned["ts"], errors="coerce")
+    aligned = aligned.dropna(subset=["ts", "true_steps"])
+    if aligned.empty:
+        return
+
+    # Collect users with adequate coverage (preserve first-appearance order)
+    grouped = []
+    for uid, grp in aligned.groupby("user_id", sort=False):
+        grp = grp.sort_values("ts")
+        if grp["ts"].dt.floor("D").nunique() > 0 and len(grp) >= 10:
+            grouped.append((uid, grp))
+    if not grouped:
+        return
+
+    # >>> Change: choose the 3rd eligible user (index 2). Fallback to last if fewer than 3.
+    pick_idx = 7 if len(grouped) > 2 else len(grouped) - 1
+    uid, user_df = grouped[pick_idx]
+
+    user_df = user_df.sort_values("ts").copy()
+    user_df["day"] = user_df["ts"].dt.floor("D")
+    unique_days = user_df["day"].drop_duplicates().sort_values()
+    if unique_days.empty:
+        return
+
+    days_to_use = unique_days[: min(max_days, len(unique_days))]
+    week_df = user_df[user_df["day"].isin(days_to_use)].sort_values("ts")
+    if len(week_df) < 2:
+        return
+
+    # Determine the portion considered "missing" (last quarter of the selected range)
+    n_points = len(week_df)
+    cutoff = int(np.floor(n_points * 0.75))
+    cutoff = min(max(cutoff, 1), n_points - 1)
+    pred_mask = np.zeros(n_points, dtype=bool)
+    pred_mask[cutoff:] = True
+
+    week_df["observed_steps"] = week_df["true_steps"].to_numpy()
+    week_df.loc[pred_mask, "observed_steps"] = np.nan
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(
+        week_df["ts"],
+        week_df["observed_steps"],
+        color="royalblue",
+        label="Observed steps",
+        linewidth=1.6,
+    )
+
+    plt.plot(
+        week_df.loc[pred_mask, "ts"],
+        week_df.loc[pred_mask, "pred_steps"],
+        color="darkorange",
+        label="Model prediction",
+        linewidth=2.2,
+    )
+
+    # Optional: show the hidden ground truth for reference
+    plt.scatter(
+        week_df.loc[pred_mask, "ts"],
+        week_df.loc[pred_mask, "true_steps"],
+        color="royalblue",
+        alpha=0.45,
+        s=18,
+        label="True steps (hidden)",
+    )
+
+    plt.title(f"Weekly example – user {uid}")
+    plt.xlabel("Timestamp")
+    plt.ylabel("Steps")
+    plt.grid(True, alpha=0.25)
+    plt.legend(loc="upper right")
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%a\n%H:%M"))
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches="tight")
+    plt.close()
+
 # in train.py before fit()
 def make_sample_weight(y, low=50, high=400, max_w=2.0):
     w = np.ones_like(y, dtype="float32")
@@ -428,6 +538,13 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
 
         # quick plot (test)
         plot_preds(yte, yhat_te, Path(run_dir) / f"{name}_test_preds.png", n=500)
+        plot_weekly_gap_example(
+            te,
+            yte,
+            yhat_te,
+            Path(run_dir) / f"{name}_weekly_example.png",
+            rng_seed=42,
+        )
 
         # also append the simple summary row to the global experiments/results.csv
         append_results_row({
