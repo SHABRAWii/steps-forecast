@@ -69,7 +69,7 @@ eval:
   metrics: ["MAE","RMSE","MAPE","R2"]
   top_k_plots: 3
   save_preds: true
-  tolerance_steps: 50   # used for ToleranceAcc
+  tolerance_steps: 100   # used for ToleranceAcc
 
 runtime:
   random_state: 42

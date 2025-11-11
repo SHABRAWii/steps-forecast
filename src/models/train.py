@@ -164,15 +164,20 @@ def _calendar_baseline_predictions(
     yhat_te = _predict(test_df)
     return yhat_tr, yhat_va, yhat_te
 
-def plot_weekly_gap_example(
+def plot_biweekly_gap_example(
     df: pd.DataFrame,
     y_true: np.ndarray,
     y_pred: np.ndarray,
     path: Path,
     rng_seed: int = 0,
-    max_days: int = 7,
+    max_days: int = 14,          # full span is two weeks
+    middle_frac: float = 0.05,   # ~5% of points hidden in the MIDDLE
+    middle_min_pts: int = 8,     # keep it visible but small
+    middle_max_pts: int = 64,    # cap size so it never dominates
 ) -> None:
-    """Create a weekly plot for the *third* eligible user with a hidden segment replaced by predictions."""
+    """Two-week plot for the *third* eligible user.
+    A small middle slice is hidden and replaced by predictions; observed data is continuous on both sides.
+    """
 
     if df is None or len(df) == 0:
         return
@@ -207,7 +212,7 @@ def plot_weekly_gap_example(
     if not grouped:
         return
 
-    # >>> Change: choose the 3rd eligible user (index 2). Fallback to last if fewer than 3.
+    # Choose the 3rd eligible user (index 2). Fallback to last if fewer than 3.
     pick_idx = 7 if len(grouped) > 2 else len(grouped) - 1
     uid, user_df = grouped[pick_idx]
 
@@ -217,56 +222,78 @@ def plot_weekly_gap_example(
     if unique_days.empty:
         return
 
+    # Use up to 14 consecutive days from the user's earliest day
     days_to_use = unique_days[: min(max_days, len(unique_days))]
-    week_df = user_df[user_df["day"].isin(days_to_use)].sort_values("ts")
-    if len(week_df) < 2:
+    span_df = user_df[user_df["day"].isin(days_to_use)].sort_values("ts")
+    if len(span_df) < 4:  # need a few points to form middle slice
         return
 
-    # Determine the portion considered "missing" (last quarter of the selected range)
-    n_points = len(week_df)
-    cutoff = int(np.floor(n_points * 0.75))
-    cutoff = min(max(cutoff, 1), n_points - 1)
-    pred_mask = np.zeros(n_points, dtype=bool)
-    pred_mask[cutoff:] = True
+    # --------- SMALL middle-window mask (prediction slice) ----------
+    n_points = len(span_df)
+    mid_len = int(np.floor(n_points * middle_frac))
+    mid_len = max(middle_min_pts, mid_len)
+    mid_len = min(mid_len, middle_max_pts, n_points - 2)  # keep it small and valid
 
-    week_df["observed_steps"] = week_df["true_steps"].to_numpy()
-    week_df.loc[pred_mask, "observed_steps"] = np.nan
+    start_idx = (n_points - mid_len) // 2
+    end_idx = start_idx + mid_len - 1
+    print(f"[Plot] User {uid}: total points={n_points}, middle slice idx=({start_idx}, {end_idx})")
+    pred_mask = np.zeros(n_points, dtype=bool)
+    pred_mask[start_idx : end_idx + 1] = True
+    # ---------------------------------------------------------------
+
+    span_df["observed_steps"] = span_df["true_steps"].to_numpy()
+    span_df.loc[pred_mask, "observed_steps"] = np.nan  # break only the middle segment
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    plt.figure(figsize=(10, 4))
+    plt.figure(figsize=(12, 4))
+
+    # Observed segments (left & right)
     plt.plot(
-        week_df["ts"],
-        week_df["observed_steps"],
+        span_df["ts"],
+        span_df["observed_steps"],
         color="royalblue",
         label="Observed steps",
         linewidth=1.6,
+        zorder=1,
     )
 
+    # Predictions only over the middle window
     plt.plot(
-        week_df.loc[pred_mask, "ts"],
-        week_df.loc[pred_mask, "pred_steps"],
+        span_df.loc[pred_mask, "ts"],
+        span_df.loc[pred_mask, "pred_steps"],
         color="darkorange",
         label="Model prediction",
         linewidth=2.2,
+        zorder=3,
     )
 
-    # Optional: show the hidden ground truth for reference
+    # Optional: show the hidden ground truth in the middle window
     plt.scatter(
-        week_df.loc[pred_mask, "ts"],
-        week_df.loc[pred_mask, "true_steps"],
+        span_df.loc[pred_mask, "ts"],
+        span_df.loc[pred_mask, "true_steps"],
         color="royalblue",
         alpha=0.45,
         s=18,
         label="True steps (hidden)",
+        zorder=2,
     )
 
-    plt.title(f"Weekly example – user {uid}")
+    # Shade only the middle predicted region (small)
+    ts_pred_start = span_df["ts"].iloc[start_idx]
+    ts_pred_end   = span_df["ts"].iloc[end_idx]
+    try:
+        plt.axvspan(ts_pred_start, ts_pred_end, alpha=0.08, zorder=0)
+    except Exception:
+        pass
+
+    # Keep full two-week span visible (no zoom)
+    plt.title(f"Two-week example – user {uid}")
     plt.xlabel("Timestamp")
     plt.ylabel("Steps")
     plt.grid(True, alpha=0.25)
     plt.legend(loc="upper right")
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%a\n%H:%M"))
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%a\n%m-%d\n%H:%M"))
     plt.tight_layout()
     plt.savefig(path, bbox_inches="tight")
     plt.close()
@@ -568,7 +595,7 @@ def main(cfg_path: str, resume_from: str = "", verbose: bool = False):
 
         # quick plot (test)
         plot_preds(yte, yhat_te, Path(run_dir) / f"{name}_test_preds.png", n=500)
-        plot_weekly_gap_example(
+        plot_biweekly_gap_example(
             te,
             yte,
             yhat_te,
